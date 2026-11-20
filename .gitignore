@@ -1,0 +1,20 @@
+/vendor/
+/.env
+/var/
+/.phpunit.cache/
+
+# Local test/browser artifacts
+/ac.txt
+/uc.txt
+/al.html
+/ul.html
+
+# AI-agent/editor workspace metadata
+/.agents/
+/.codex/
+/.claude/
+/.cursor/
+
+# Local operating-system files
+.DS_Store
+Thumbs.db

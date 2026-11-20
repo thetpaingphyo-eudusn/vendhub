@@ -1,0 +1,129 @@
+# Vending Machine
+
+PHP 8.3 application for a vending machine: product stock, purchases, session login, and a token-protected API.
+
+## Requirements
+
+- PHP 8.2 or newer (developed on 8.3)
+- Composer
+- MySQL or MariaDB (XAMPP is enough)
+- The web root must be the `public` directory
+
+## Setup
+
+```bash
+composer install
+copy .env.example .env
+php bin/install.php
+php -S localhost:8080 -t public public/router.php
+```
+
+Open http://localhost:8080
+
+XAMPP alternative: start Apache and MySQL, point a virtual host's document root at `public`, and set `APP_URL` in `.env` to that host.
+
+`.env` matches a default XAMPP MySQL install: host `127.0.0.1`, user `root`, empty password, database `vending_machine`.
+
+## Demo accounts
+
+| Email | Password | Role |
+| --- | --- | --- |
+| admin@vending.test | Admin12345 | admin |
+| user@vending.test | User12345 | user |
+
+Seeded products include the brief set (Coke 3.990, Pepsi 6.885, Water 0.500) plus snack and drink extras that match the PNGs in `public/assets/products`. Product tiles load `/assets/products/{slug}.png` when that file exists. The shop hero uses `public/assets/vending_machine.png`.
+
+## Database design
+
+Three tables, InnoDB, `utf8mb4`.
+
+`users` holds people who can sign in. `password_hash` is produced by `password_hash()`. `role` is `admin` or `user`. Email is unique.
+
+`products` is the machine inventory. `price` is `DECIMAL(10,3)` so a price such as 6.885 is stored exactly. `quantity_available` is the stock on hand. `slug` is the public URL key (`/products/pepsi`), and it stays the same after a rename.
+
+`transactions` is the purchase ledger. A user has many transactions. A product has many transactions. `unit_price` and `total` are copied onto the row at purchase time, so a later price change does not rewrite history. Stock decrement and the ledger insert run in one database transaction. A product or user with purchases cannot be deleted, because the foreign keys are `RESTRICT`.
+
+The repository still implements update and delete for transactions. The screen only lists them. A sale is not edited after it is recorded.
+
+## Where each task lives
+
+1. Database description: this section and `database/schema.sql`
+2. PDO connection and CRUD: `src/Core/Database/Connection.php` and `src/Repository/Pdo*Repository.php`
+3. Sessions, password hashing, roles: `src/Service/AuthService.php`
+4. Role checks: `src/Middleware/RequireRole.php` and the controller guards
+5. Product CRUD: `src/Controller/ProductsController.php`
+6. Purchase: `ProductsController::purchase()` and `src/Service/PurchaseService.php`
+7. Admin CRUD screens: `/admin/products`, `views/products/manage.php`, `form.php`
+8. List, pagination, sorting: `views/products/index.php`, `App\Model\ProductQuery`
+9. Purchase screen: `views/products/purchase.php`
+10. Routes: `#[Route]` attributes, read by `src/Core/Http/Router.php`
+11. Purchase attribute route: `POST /products/{slug}/purchase`
+
+Admin routes are under `/admin/*`. Shop routes stay under `/products/*`.
+12. Product rules: `src/Validation/ProductValidator.php`
+13. Browser checks: `public/assets/app.js`. Server errors render in the same form.
+14. PHPUnit: `tests/Controller/ProductsControllerTest.php`
+15. Constructor injection and mocks: controller tests never open MySQL
+16. JSON API: `src/Controller/Api/ProductsApiController.php`
+17. JWT: `src/Service/JwtService.php`, `src/Middleware/RequireJwt.php`, `POST /api/auth/token`
+
+## API
+
+```bash
+curl -s http://localhost:8080/api/products
+
+curl -s -X POST http://localhost:8080/api/auth/token ^
+  -H "Content-Type: application/json" ^
+  -d "{\"email\":\"user@vending.test\",\"password\":\"User12345\"}"
+
+curl -s -X POST http://localhost:8080/api/products/coke/purchase ^
+  -H "Authorization: Bearer TOKEN" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"quantity\":1}"
+```
+
+List and product detail are public. Creating, updating, and deleting products require an admin token. Purchase requires any valid token. A missing or bad token returns 401.
+
+Sort values accepted by the list are `name`, `price`, and `quantity_available`. Anything else is treated as `name`.
+
+## Tests
+
+Dedicated suite lives in `tests/` (see `tests/README.md`).
+
+```bash
+composer test
+composer test:regression    # full suite alias
+composer test:integration
+composer test:unit
+composer test:controller
+```
+
+Suites:
+
+- `tests/Unit` — validation, services, middleware, security (positive + negative)
+- `tests/Controller` — Products + Auth + API with DI/mocks (PDF tasks 14–15)
+- `tests/Integration` — multi-layer flows (router, register, purchase, API)
+- Regression = full run via `composer test`
+
+Controller tests mock repositories and never open MySQL. Integration tests wire multiple layers together.
+
+## Deployment / production security
+
+Any host that runs PHP 8.2+ and MySQL can serve this. Set the document root to `public`, copy `.env.example` to `.env`, fill in the database, run `composer install --no-dev`, then `php bin/install.php`.
+
+Production `.env` must use:
+
+```env
+APP_ENV=production
+APP_DEBUG=false
+FORCE_HTTPS=true
+APP_URL=https://your-domain.example
+JWT_SECRET=<at-least-32-random-characters>
+JWT_TTL=3600
+CORS_ALLOWED_ORIGINS=
+TRUSTED_PROXIES=
+```
+
+The app refuses to boot in production with debug on or a weak/short `JWT_SECRET`. Session cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` on HTTPS. Login, admin login, register, and API token endpoints are rate-limited. CORS is same-origin only unless you explicitly list origins. Security headers (CSP, frame deny, nosniff, HSTS on HTTPS) are sent on every response.
+
+The preview URL is the host you deploy to. This repository does not include a live server.
