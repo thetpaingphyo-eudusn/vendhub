@@ -1,0 +1,14 @@
+.git/
+.env
+.phpunit.cache/
+.agents/
+.codex/
+.claude/
+.cursor/
+ac.txt
+uc.txt
+al.html
+ul.html
+var/
+vendor/
+tests/

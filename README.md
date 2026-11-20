@@ -127,3 +127,14 @@ TRUSTED_PROXIES=
 The app refuses to boot in production with debug on or a weak/short `JWT_SECRET`. Session cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` on HTTPS. Login, admin login, register, and API token endpoints are rate-limited. CORS is same-origin only unless you explicitly list origins. Security headers (CSP, frame deny, nosniff, HSTS on HTTPS) are sent on every response.
 
 The preview URL is the host you deploy to. This repository does not include a live server.
+
+## Render deployment
+
+The repository includes `Dockerfile` and `render.yaml` for a Render free web service. Render does not provide a free MySQL database with this app configuration, so create a MySQL-compatible database first and keep its credentials out of Git.
+
+1. In Render, select **New > Blueprint** and connect this GitHub repository.
+2. Enter the prompted `APP_URL`, `DB_HOST`, `DB_NAME`, `DB_USER`, and `DB_PASS` values. Keep `DB_PORT` at `3306` unless your provider gives a different port.
+3. Render generates `JWT_SECRET` automatically. `RUN_DATABASE_INSTALL=true` initializes the configured database and seeds the demo accounts on its first application start.
+4. Deploy the Blueprint. Render exposes the service on its generated `onrender.com` URL.
+
+For the free plan, allow for cold starts. Set `FORCE_HTTPS=true` only after configuring trusted proxy handling for your chosen hosting setup.

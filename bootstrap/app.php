@@ -139,18 +139,8 @@ return new Kernel($router, $container->get(View::class), $config, $base);
 function loadEnv(string $root): void
 {
     $env = $root . '/.env';
-    $example = $root . '/.env.example';
-    if (!is_file($env) && is_file($example)) {
-        copy($example, $env);
-    }
-    if (!is_file($env)) {
-        return;
-    }
-
-    $lines = file($env, FILE_IGNORE_NEW_LINES);
-    if ($lines === false) {
-        return;
-    }
+    $lines = is_file($env) ? file($env, FILE_IGNORE_NEW_LINES) : [];
+    $lines = $lines === false ? [] : $lines;
 
     foreach ($lines as $line) {
         $line = trim($line);
@@ -159,7 +149,21 @@ function loadEnv(string $root): void
         }
         [$key, $value] = explode('=', $line, 2);
         $value = trim($value, " \t\"'");
-        $_ENV[trim($key)] = $value;
+        $key = trim($key);
+        if (getenv($key) === false) {
+            $_ENV[$key] = $value;
+        }
+    }
+
+    foreach ([
+        'APP_ENV', 'APP_URL', 'APP_DEBUG', 'FORCE_HTTPS',
+        'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS',
+        'JWT_SECRET', 'JWT_TTL', 'CORS_ALLOWED_ORIGINS', 'TRUSTED_PROXIES',
+    ] as $key) {
+        $value = getenv($key);
+        if ($value !== false) {
+            $_ENV[$key] = $value;
+        }
     }
 }
 

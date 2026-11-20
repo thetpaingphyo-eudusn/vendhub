@@ -5,20 +5,21 @@ declare(strict_types=1);
 $root = dirname(__DIR__);
 require $root . '/vendor/autoload.php';
 
-$envFile = $root . '/.env';
-$example = $root . '/.env.example';
-if (!is_file($envFile) && is_file($example)) {
-    copy($example, $envFile);
-}
-
 $env = [];
-foreach (file($envFile, FILE_IGNORE_NEW_LINES) ?: [] as $line) {
+foreach (file($root . '/.env', FILE_IGNORE_NEW_LINES) ?: [] as $line) {
     $line = trim($line);
     if ($line === '' || str_starts_with($line, '#') || !str_contains($line, '=')) {
         continue;
     }
     [$key, $value] = explode('=', $line, 2);
     $env[trim($key)] = trim($value, " \t\"'");
+}
+
+foreach (['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS'] as $key) {
+    $value = getenv($key);
+    if ($value !== false) {
+        $env[$key] = $value;
+    }
 }
 
 $host = $env['DB_HOST'] ?? '127.0.0.1';
@@ -29,22 +30,30 @@ $pass = $env['DB_PASS'] ?? '';
 
 try {
     $server = new PDO(
-        sprintf('mysql:host=%s;port=%s;charset=utf8mb4', $host, $port),
+        sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4', $host, $port, $name),
         $user,
         $pass,
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
     );
 } catch (PDOException $exception) {
-    fwrite(STDERR, "Cannot reach MySQL. Start MySQL in the XAMPP control panel, then run this again.\n");
-    fwrite(STDERR, $exception->getMessage() . "\n");
-    exit(1);
+    try {
+        $server = new PDO(
+            sprintf('mysql:host=%s;port=%s;charset=utf8mb4', $host, $port),
+            $user,
+            $pass,
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+        );
+        $server->exec(sprintf(
+            'CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci',
+            str_replace('`', '', $name),
+        ));
+        $server->exec(sprintf('USE `%s`', str_replace('`', '', $name)));
+    } catch (PDOException) {
+        fwrite(STDERR, "Cannot connect to the configured MySQL database.\n");
+        fwrite(STDERR, $exception->getMessage() . "\n");
+        exit(1);
+    }
 }
-
-$server->exec(sprintf(
-    'CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci',
-    str_replace('`', '', $name),
-));
-$server->exec(sprintf('USE `%s`', str_replace('`', '', $name)));
 
 runSql($server, (string) file_get_contents($root . '/database/schema.sql'));
 ensureProductCategoryColumn($server);
